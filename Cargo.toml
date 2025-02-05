@@ -1,0 +1,8 @@
+[package]
+name = "msg-dmap"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dashmap = "6.1.0"
+rdkafka = "0.37.0"
