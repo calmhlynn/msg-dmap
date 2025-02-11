@@ -12,5 +12,11 @@ dashmap = "6.1.0"
 dotenvy = "0.15.7"
 log = "0.4.25"
 once_cell = "1.20.2"
-rdkafka = { version = "0.37.0", features = ["cmake-build", "gssapi"] }
+reqwest = { version = "0.12.12", features = ["json"] }
+serde = { version = "1.0.217", features = ["derive"]}
+serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["full"] }
+uuid = { version = "1.13.1", features = ["v4"] }
+
+[dev-dependencies]
+rdkafka = { version = "0.37.0", features = ["cmake-build"] }
