@@ -1,87 +1,73 @@
-use std::sync::Arc;
+mod front;
+mod kafka_pc;
 
 use dashmap::DashMap;
 use dotenvy::dotenv;
+use front::Connection;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{self, UnboundedSender};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
-type ConnMpsc = Arc<ConnectionMpsc<ResponseData>>;
+type ResponseConnection = Arc<Connection<Response>>;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
-    let connection_map: Arc<DashMap<Uuid, ConnMpsc>> = Arc::new(DashMap::new());
-    let mut request_handles = Vec::new();
+    let conn_map: Arc<DashMap<Uuid, ResponseConnection>> = Arc::new(DashMap::new());
+    let mut fetch_tasks = Vec::new();
 
-    for task_id in 1..=10 {
-        let request_url = format!("https://jsonplaceholder.typicode.com/todos/{task_id}");
-        request_handles.push(tokio::spawn(async move {
+    for id in 1..=10 {
+        let request_url = format!("https://jsonplaceholder.typicode.com/todos/{id}");
+        fetch_tasks.push(tokio::spawn(async move {
             reqwest::get(request_url)
                 .await
                 .unwrap()
-                .json::<ResponseData>()
+                .json::<Response>()
                 .await
         }));
     }
 
-    let mut task_handles = Vec::new();
+    let mut conn_tasks = Vec::new();
 
-    for request_handle in request_handles {
-        let response_data = request_handle.await.unwrap().unwrap();
+    for fetch in fetch_tasks {
+        let response = fetch.await.unwrap().unwrap();
 
-        let (sender, mut receiver) = mpsc::unbounded_channel::<ResponseData>();
-        let idx = Uuid::new_v4();
-        let connection_mpsc = Arc::new(ConnectionMpsc::new(idx, sender));
-        connection_map.insert(idx, connection_mpsc.clone());
+        let (tx, mut rx) = mpsc::unbounded_channel::<Response>();
+        let connection = Arc::new(Connection::new(tx));
+        connection.register(&conn_map);
+        // connection_map.insert(idx, connection.clone());
 
-        let send_task_handle = {
-            let connection_mpsc_clone = connection_mpsc.clone();
-            let response_data_clone = response_data.clone();
+        let send_task = {
+            let conn = connection.clone();
+            let resp = response.clone();
             tokio::spawn(async move {
-                connection_mpsc_clone.send(response_data_clone);
+                conn.send(resp);
             })
         };
 
-        let receive_task_handle = {
-            let channel_id = connection_mpsc.id;
+        let recv_task = {
+            let conn = connection.clone();
             tokio::spawn(async move {
-                while let Some(received_data) = receiver.recv().await {
-                    println!("Channel {} received: {:?}", channel_id, received_data);
+                while let Some(resp) = rx.recv().await {
+                    println!("Channel {} received: {:?}", conn.id, resp);
                 }
             })
         };
 
-        task_handles.push(send_task_handle);
-        task_handles.push(receive_task_handle);
+        conn_tasks.push(send_task);
+        conn_tasks.push(recv_task);
     }
 
-    println!("task length: {:?}", task_handles.len());
-
-    for task_handle in task_handles {
-        let _ = task_handle.await;
-    }
-}
-
-struct ConnectionMpsc<T> {
-    id: Uuid,
-    sender: UnboundedSender<T>,
-}
-
-impl<T> ConnectionMpsc<T> {
-    fn new(id: Uuid, sender: UnboundedSender<T>) -> Self {
-        Self { id, sender }
-    }
-
-    fn send(&self, message: T) {
-        let _ = self.sender.send(message);
+    for task in conn_tasks {
+        let _ = task.await;
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ResponseData {
+struct Response {
     user_id: u32,
     id: u32,
     title: String,
