@@ -1,75 +1,69 @@
-mod front;
-mod kafka_pc;
+mod conn;
+mod conn_manager;
+mod response;
 
-use dashmap::DashMap;
+use conn::Connection;
+use conn_manager::ConnectionManager;
 use dotenvy::dotenv;
-use front::Connection;
-use serde::{Deserialize, Serialize};
+use reqwest::Error;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use uuid::Uuid;
-
-type ResponseConnection = Arc<Connection<Response>>;
+use tokio::task::JoinHandle;
 
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
-    let conn_map: Arc<DashMap<Uuid, ResponseConnection>> = Arc::new(DashMap::new());
-    let mut fetch_tasks = Vec::new();
+    const COUNT: i32 = 10;
 
-    for id in 1..=10 {
-        let request_url = format!("https://jsonplaceholder.typicode.com/todos/{id}");
-        fetch_tasks.push(tokio::spawn(async move {
-            reqwest::get(request_url)
-                .await
-                .unwrap()
-                .json::<Response>()
-                .await
-        }));
-    }
+    let conn_map = Arc::new(ConnectionManager::new());
+    let fetch_tasks = fetch_data(COUNT);
 
-    let mut conn_tasks = Vec::new();
+    let mut recv_tasks = Vec::new();
 
+    // Call a concurrent async tasks
     for fetch in fetch_tasks {
         let response = fetch.await.unwrap().unwrap();
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<Response>();
-        let connection = Arc::new(Connection::new(tx));
-        connection.register(&conn_map);
-        // connection_map.insert(idx, connection.clone());
+        let (tx, mut rx) = mpsc::unbounded_channel::<response::Response>();
+        let connection = Arc::new(Connection::new(response.id, tx));
+        conn_map.clone().register(&connection);
 
-        let send_task = {
-            let conn = connection.clone();
-            let resp = response.clone();
-            tokio::spawn(async move {
-                conn.send(resp);
-            })
-        };
+        // sending message per connection.
+        connection.send(response);
 
         let recv_task = {
             let conn = connection.clone();
             tokio::spawn(async move {
                 while let Some(resp) = rx.recv().await {
-                    println!("Channel {} received: {:?}", conn.id, resp);
+                    println!("Receiver ID: {}, Response data: {:?}", conn.id, resp);
                 }
             })
         };
 
-        conn_tasks.push(send_task);
-        conn_tasks.push(recv_task);
+        recv_tasks.push(recv_task);
     }
 
-    for task in conn_tasks {
+    for task in recv_tasks {
         let _ = task.await;
     }
+
+    conn_map.shutdown_all().await;
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Response {
-    user_id: u32,
-    id: u32,
-    title: String,
-    completed: bool,
+fn fetch_data(count: i32) -> Vec<JoinHandle<Result<response::Response, Error>>> {
+    let mut tasks = Vec::new();
+
+    for id in 1..=count {
+        let request_url = format!("https://jsonplaceholder.typicode.com/todos/{id}");
+        tasks.push(tokio::spawn(async move {
+            reqwest::get(request_url)
+                .await
+                .unwrap()
+                .json::<response::Response>()
+                .await
+        }));
+    }
+
+    tasks
 }
