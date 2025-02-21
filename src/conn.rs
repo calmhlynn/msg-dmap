@@ -1,6 +1,8 @@
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
+use crate::error::Error;
+
 pub(super) struct Connection<T> {
     pub(super) id: u32,
     pub(super) uuid: Uuid,
@@ -17,8 +19,12 @@ impl<T> Connection<T> {
     }
 
     #[inline]
-    pub(super) fn send(&self, message: T) {
-        let _ = self.tx.send(message);
+    pub(super) fn send(&self, message: T) -> Result<(), Error> {
+        let _ = self
+            .tx
+            .send(message)
+            .map_err(|e| Error::Network(e.to_string()));
+        Ok(())
     }
 
     pub(super) async fn shutdown(&self) {

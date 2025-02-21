@@ -1,5 +1,6 @@
 mod conn;
 mod conn_manager;
+mod error;
 mod response;
 
 use conn::Connection;
