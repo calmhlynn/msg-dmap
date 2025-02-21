@@ -3,6 +3,8 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use uuid::Uuid;
 
+use crate::error::Error;
+
 use super::Connection;
 
 pub(super) struct ConnectionManager<T>(DashMap<Uuid, Arc<Connection<T>>>);
@@ -12,8 +14,13 @@ impl<T> ConnectionManager<T> {
         Self(DashMap::new())
     }
 
-    pub(super) fn register(&self, conn: &Arc<Connection<T>>) {
-        self.0.insert(conn.uuid, conn.clone());
+    pub(super) fn register(&self, conn: &Arc<Connection<T>>) -> Result<(), Error> {
+        let _ = self
+            .0
+            .insert(conn.uuid, conn.clone())
+            .ok_or(|| Error::Unknown);
+
+        Ok(())
     }
 
     pub(super) fn unregister(&self, id: &Uuid) {
