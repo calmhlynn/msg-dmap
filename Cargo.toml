@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/calmhlynn/msg-dmap"
 
 [dependencies]
-chrono = "0.4.39"
+chrono = "0.4.40"
 dashmap = "6.1.0"
 dotenvy = "0.15.7"
 log = "0.4.25"
