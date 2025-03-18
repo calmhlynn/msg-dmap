@@ -5,14 +5,14 @@ use tokio::io;
 #[non_exhaustive]
 pub(super) enum Error {
     #[error("Network connection failed: {0}")]
-    Network(String),
+    NetworkConnectionFailed(String),
 
     #[error("String parsing failed: {0}")]
-    Parse(String),
+    StringParsingFailed(String),
 
     #[error("No messages available in the mpsc channel")]
-    EmptyQueue,
+    NoMessagesInQueue,
 
     #[error("unknown error")]
-    Unknown,
+    UnknownError,
 }
