@@ -23,7 +23,7 @@ impl<T> Connection<T> {
         let _ = self
             .tx
             .send(message)
-            .map_err(|e| Error::Network(e.to_string()));
+            .map_err(|e| Error::NetworkConnectionFailed(e.to_string()));
         Ok(())
     }
 
