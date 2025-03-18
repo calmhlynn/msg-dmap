@@ -18,7 +18,7 @@ impl<T> ConnectionManager<T> {
         let _ = self
             .0
             .insert(conn.uuid, conn.clone())
-            .ok_or(|| Error::Unknown);
+            .ok_or(|| Error::UnknownError);
 
         Ok(())
     }
